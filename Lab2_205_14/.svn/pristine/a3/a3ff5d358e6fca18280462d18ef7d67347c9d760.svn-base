@@ -1,0 +1,34 @@
+package ca.uwaterloo.lab2.filter;
+
+public class LowPassFilter{
+	float currentValue = 1;
+	float[] filteringValue;
+	float coe;
+	
+	public LowPassFilter(float[] InitialFilteringValue, float Coe){
+		currentValue = (float)0;
+		filteringValue = new float[] {0,0};
+		if (InitialFilteringValue.length < 2){
+			filteringValue[1] = InitialFilteringValue[0];
+			filteringValue[0] = InitialFilteringValue[0];
+		}
+		else{
+			filteringValue[1] = InitialFilteringValue[InitialFilteringValue.length-1];
+			filteringValue[0] = InitialFilteringValue[InitialFilteringValue.length-2];
+		}
+		currentValue = (filteringValue[1] - filteringValue[0])/coe + filteringValue[0];
+	};
+	
+	public float GetResult(){
+		return currentValue;
+	}
+	
+	public void AddNewValue(float NewValue){
+		filteringValue[0] = filteringValue[1];
+		filteringValue[1] = NewValue;
+		currentValue = (filteringValue[1] - filteringValue[0])/coe + currentValue;
+	};
+	
+
+	
+}

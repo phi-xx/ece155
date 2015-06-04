@@ -1,0 +1,309 @@
+package ca.uwaterloo.lab2;
+
+
+import java.util.Arrays;
+
+import android.app.Activity;
+import android.app.Fragment;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
+import android.os.Bundle;
+import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.view.View;
+import android.view.View.OnClickListener;
+import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import ca.uwaterloo.sensortoy.LineGraphView;
+
+
+
+public class MainActivity extends Activity {
+
+	static LineGraphView graph;
+	static Button resetButton;
+	
+
+	@Override
+	protected void onCreate(Bundle savedInstanceState) {
+		super.onCreate(savedInstanceState);
+		setContentView(R.layout.activity_main);
+		if (savedInstanceState == null) {
+			getFragmentManager().beginTransaction()
+			.add(R.id.container, new PlaceholderFragment()).commit();
+		}
+
+		graph = new LineGraphView(getApplicationContext(),100, Arrays.asList("x","y","z"));
+		graph.setVisibility(View.VISIBLE);
+
+	}
+
+	@Override
+	public boolean onCreateOptionsMenu(Menu menu) {
+		// Inflate the menu; this adds items to the action bar if it is present.
+		getMenuInflater().inflate(R.menu.main, menu);
+		return true;
+	}
+
+	@Override
+	public boolean onOptionsItemSelected(MenuItem item) {
+		// Handle action bar item clicks here. The action bar will
+		// automatically handle clicks on the Home/Up button, so long
+		// as you specify a parent activity in AndroidManifest.xml.
+		int id = item.getItemId();
+		if (id == R.id.action_settings) {
+			return true;
+		}
+		return super.onOptionsItemSelected(item);
+	}
+
+	/**
+	 * A placeholder fragment containing a simple view.
+	 */
+
+	public static class PlaceholderFragment extends Fragment {
+
+		public PlaceholderFragment() {
+		}
+
+
+		@Override
+		public View onCreateView(LayoutInflater inflater, ViewGroup container,
+				Bundle savedInstanceState) {
+
+			
+
+
+			View rootView = inflater.inflate(R.layout.fragment_main, container,
+					false);
+			TextView tv = (TextView) rootView.findViewById(R.id.label1);
+
+			//Initializes Text View [Not Needed]
+			tv.setText("Reading Sensors......");
+
+			//Array to hold the printing of the x,y,z data from sensors
+			TextView[] tvMax = new TextView[3];
+
+			//Initializes max-value TextView Array
+			for(int i = 0; i < 3; i++){
+				tvMax[i] = new TextView(rootView.getContext());
+			}
+
+
+			//Holds Abs Max of X Y Z from 3 Sensors (array of size 9)
+			//Acceleration x, y, z || Magnetic x, y, z || Rotational x, y, z
+			float[] maxVals = new float[]{0,0,0,0,0,0,0,0,0};
+
+			//Use valIndex later in labs 2++
+			int valIndex = 0;
+			for(int i = 0; i < 3; i++){
+				tvMax[i].setText("Record Max Vals: \n" + 
+						"X: " + maxVals[valIndex] + "\n" + 
+						"Y: " + maxVals[valIndex + 1] + "\n" +
+						"Z: " + maxVals[valIndex + 2] + "\n" + 
+						"---------------------------------\n---------------------------------");
+				valIndex ++;
+			}
+
+			//set the reset button
+			resetButton = (Button) rootView.findViewById(R.id.ResetButton);
+			OnClickListener resetButtonListener = new ResetButtonListener(maxVals);
+			resetButton.setOnClickListener(resetButtonListener);
+			
+			//Consider making this just 1 TextView
+
+			TextView AccText = new TextView(rootView.getContext());
+			AccText.setText("this is AccText");
+
+			TextView RotText = new TextView(rootView.getContext());
+			RotText.setText("this is RotText");
+
+
+			//Sets up l as a linear layout
+			LinearLayout l = (LinearLayout) rootView.findViewById(R.id.LinearLabel);
+
+			//Fills out Layout
+			l.addView(graph);
+			l.addView(AccText);
+			l.addView(tvMax[0]);
+			l.addView(RotText);
+			l.addView(tvMax[2]);
+			l.setOrientation(LinearLayout.VERTICAL);
+
+			//Setting up sensor manager
+			SensorManager sensorManager = (SensorManager) 
+					rootView.getContext().getSystemService(SENSOR_SERVICE);
+
+			
+			//Initializing 4 Event Listeners for 4 main sensors (light, acc, mag, rot)
+			
+			SensorEventListener accListener = new GeneralSensorEventListener(AccText, graph, maxVals, tvMax);
+			
+			SensorEventListener rotListener = new GeneralSensorEventListener(RotText, graph, maxVals, tvMax);
+			
+			
+			
+			Sensor accSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION);
+
+			Sensor rotSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
+
+		
+			sensorManager.registerListener(accListener, accSensor, SensorManager.SENSOR_DELAY_FASTEST);
+
+			sensorManager.registerListener(rotListener, rotSensor, SensorManager.SENSOR_DELAY_FASTEST);
+
+			return rootView;
+		}
+	}
+}
+
+//Takes in the array of MaxAbs vals, and its corresponding text view from the previous classes
+class GeneralSensorEventListener implements SensorEventListener{
+	TextView output;
+	LineGraphView Graph;
+	float[] maxVals;
+	TextView[] tvMax;
+	
+	int filterLength;
+	
+	float[] X_rawData;
+	float[] Y_rawData;
+	float[] Z_rawData;
+	float[] X_filteredData;
+	float[] Y_filteredData;
+	float[] Z_filteredData;
+
+	public GeneralSensorEventListener(TextView outputView){
+		output = outputView;
+	}
+
+	public GeneralSensorEventListener(TextView outputView, 
+			LineGraphView outputGraph, 
+			float[] MaxVals,
+			TextView[] TvMax){
+		output = outputView;
+		Graph = outputGraph;
+		maxVals = MaxVals;
+		tvMax = TvMax;
+		
+		filterLength = 10;
+		
+		X_rawData = new float[filterLength];
+		Y_rawData = new float[filterLength];
+		Z_rawData = new float[filterLength];
+		
+		for (int i = 0; i < filterLength; i++){
+			X_rawData[i] = 0;
+			Y_rawData[i] = 0;
+			Z_rawData[i] = 0;
+		}
+		
+	}
+	
+	float[] lowpass(float[] in) {
+		float[] out = new float[in.length];
+		float a = (float) 0.1;
+		out[0] = 0;
+		for(int i = 1; i < in.length; i++) {
+			out[i] = a * in[i] + (1-a) * out[i-1];  // this is low-pass calculation
+			//out[i] = a* out[i-1] + a * (in[i] - in[i-1]);   // this is high pass
+		}
+		return out;
+	}
+	
+
+
+	public void onAccuracyChanged(Sensor s, int i){}
+	
+	public void onSensorChanged(SensorEvent se){
+
+		//Acc Sensor Output
+		if(se.sensor.getType() == Sensor.TYPE_LINEAR_ACCELERATION){
+			
+			//apply the low-pass filter
+			for (int i = 1; i < filterLength; i++){
+				X_rawData[i-1] = X_rawData[i];
+				Y_rawData[i-1] = Y_rawData[i];
+				Z_rawData[i-1] = Z_rawData[i];
+			}
+			X_rawData[filterLength - 1] = se.values[0];
+			Y_rawData[filterLength - 1] = se.values[1];
+			Z_rawData[filterLength - 1] = se.values[2];
+			
+			X_filteredData = lowpass(X_rawData);
+			Y_filteredData = lowpass(Y_rawData);
+			Z_filteredData = lowpass(Z_rawData);
+			
+			//set output
+			output.setText("Accelerometer: " +
+					"\nX: " + String.valueOf(X_filteredData[1]) + 
+					"\nY: " + String.valueOf(Y_filteredData[1]) + 
+					"\nZ: " + String.valueOf(Z_filteredData[1]) + 
+					"\n----------------------------------");
+			
+			Graph.addPoint(new float[] {X_filteredData[1], Y_filteredData[1], Z_filteredData[1]});
+
+			//Checks to see if max value has changed, if so the new value is written into the array
+			for (int index = 0; index <= 2; index++){
+				if (Math.abs(se.values[index]) >maxVals[index]){
+					maxVals[index] = Math.abs(se.values[index]);
+				}
+			}
+
+			//Outputs The First Index in TextViewArray with Max Vals
+			tvMax[0].setText("Record Max Vals: \n" + 
+					"X: " + maxVals[0] + "\n" + 
+					"Y: " + maxVals[1] + "\n" +
+					"Z: " + maxVals[2] + "\n" + 
+					"---------------------------------\n---------------------------------");
+
+		}
+
+
+		//Rot Sensor Output
+		if(se.sensor.getType() == Sensor.TYPE_ROTATION_VECTOR){
+
+			output.setText("Rotation: " +
+					"\nX: " + String.valueOf(se.values[0]) + 
+					"\nY: " + String.valueOf(se.values[1]) + 
+					"\nZ: " + String.valueOf(se.values[2]) + 
+					"\n----------------------------------");
+
+			//se.values[0] = xsin(theta/2)
+
+			//Fills MaxVals [6, 7, 8]
+			for (int index = 0; index <= 2; index++){
+				if (Math.abs(se.values[index]) >maxVals[index+6]){
+					maxVals[index+6] = Math.abs(se.values[index]);
+				}
+			}
+
+			//Graph.addPoint(se.values);
+			tvMax[2].setText("Record Max Vals: \n" + 
+					"X: " + maxVals[6] + "\n" + 
+					"Y: " + maxVals[7] + "\n" +
+					"Z: " + maxVals[8] + "\n" + 
+					"---------------------------------\n---------------------------------");
+		}
+	}
+}
+
+class ResetButtonListener implements OnClickListener{
+	float[] resetVals;
+	
+	ResetButtonListener(float[] ResetVals){
+		resetVals = ResetVals;
+	}
+	public void onClick(View v){
+		for (int i = 0; i < resetVals.length; i++){
+			resetVals[i] = 0;
+		}
+	}
+};
+
+
